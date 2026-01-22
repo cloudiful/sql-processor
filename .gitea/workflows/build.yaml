@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GOPROXY: https://nexus.cloud1ful.com/repository/go-proxy/,direct
+      GOPRIVATE: gitea.cloud1ful.com
+      PROJECT_NAME: ${{ github.event.repository.name }}
+      MAIN_PATH: ./cmd/sql-processor
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+          cache: true
+
+      - name: Run Tests
+        run: go test -v ./...
+
+      - name: Build Windows
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: go build -v -o ${{ env.PROJECT_NAME }}-windows-amd64.exe ${{ env.MAIN_PATH }}
+
+      - name: Build Linux
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: go build -v -o ${{ env.PROJECT_NAME }}-linux-amd64 ${{ env.MAIN_PATH }}
+
+      - name: Build macOS (Apple Silicon)
+        env:
+          GOOS: darwin
+          GOARCH: arm64
+        run: go build -v -o ${{ env.PROJECT_NAME }}-darwin-arm64 ${{ env.MAIN_PATH }}
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            ${{ env.PROJECT_NAME }}-windows-amd64.exe
+            ${{ env.PROJECT_NAME }}-linux-amd64
+            ${{ env.PROJECT_NAME }}-darwin-arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete Old Latest Release
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: |
+          curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "${{ github.api_url }}/repos/${{ github.repository }}/releases/tags/latest" || true
+
+      - name: Update Latest Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: latest
+          name: Latest Build
+          files: |
+            ${{ env.PROJECT_NAME }}-windows-amd64.exe
+            ${{ env.PROJECT_NAME }}-linux-amd64
+            ${{ env.PROJECT_NAME }}-darwin-arm64
+          prerelease: true
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
