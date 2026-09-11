@@ -10,9 +10,155 @@ concurrency:
   group: docker-publish-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  BIN_NAME: sql-processor
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
 jobs:
-  build-and-publish:
-    runs-on: ubuntu-latest
+  build-binaries:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      RELEASE_BINARY: sql-processor-${{ github.ref_name }}-${{ matrix.target }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+        with:
+          version: v0.16.0
+
+      - name: Build binary
+        env:
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
+        run: cargo build --release --bin sql-processor --target "${{ matrix.target }}"
+
+      - name: Show sccache stats
+        if: always()
+        env:
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
+        run: sccache --show-stats
+
+      - name: Prepare binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "target/${{ matrix.target }}/release/sql-processor" "$RELEASE_BINARY"
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: ${{ env.RELEASE_BINARY }}
+          if-no-files-found: error
+          retention-days: 7
+
+  build-image-inputs:
+    name: Build Docker input ${{ matrix.arch }}
+    needs:
+      - build-binaries
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    env:
+      BINARY_NAME: sql-processor-${{ github.ref_name }}-${{ matrix.target }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: binary-artifact
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.5"
+
+      - name: Restore Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ matrix.arch }}-${{ hashFiles('frontend/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ matrix.arch }}-
+            ${{ runner.os }}-bun-
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: bun install --no-save
+
+      - name: Prepare image input directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-image-input/frontend-dist
+          install -Dm755 "binary-artifact/${BINARY_NAME}" ci-image-input/sql-processor
+
+      - name: Export OpenAPI
+        run: ci-image-input/sql-processor openapi export --output openapi/openapi.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          bun run generate:types
+          bun run build
+          cp -R .output/public/. ../ci-image-input/frontend-dist/
+
+      - name: Upload Docker input
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-input-${{ matrix.arch }}
+          path: ci-image-input
+          if-no-files-found: error
+          retention-days: 7
+
+  build-images:
+    name: Publish Docker image ${{ matrix.arch }}
+    needs:
+      - build-image-inputs
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -20,65 +166,74 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo registry and build artifacts
-        uses: actions/cache@v4
+      - name: Download Docker input
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.toml', 'crates/**/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          name: docker-input-${{ matrix.arch }}
+          path: ci-image-input
 
-      - name: Generate OpenAPI document
-        run: cargo run -p sql-processor -- openapi export --output openapi/openapi.json
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.5
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: bun install
-
-      - name: Generate frontend types
-        working-directory: frontend
-        run: bun run generate:types
-
-      - name: Build frontend
-        working-directory: frontend
-        run: bun run build
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version from tag
-        id: version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ github.ref_name }}-${{ matrix.arch }}
+            type=raw,value=latest-${{ matrix.arch }}
+
+      - name: Build and push ${{ matrix.arch }} image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
-            ${{ steps.version.outputs.version && format('ghcr.io/{0}:{1}', github.repository, steps.version.outputs.version) || '' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=sql-processor-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=sql-processor-${{ matrix.arch }}
+
+  publish-manifest:
+    name: Publish multi-architecture manifest
+    needs:
+      - build-images
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Publish version and latest manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_tag="${IMAGE_NAME}:${{ github.ref_name }}"
+          latest_tag="${IMAGE_NAME}:latest"
+          docker buildx imagetools create \
+            --tag "$version_tag" \
+            "${version_tag}-amd64" \
+            "${version_tag}-arm64"
+          docker buildx imagetools create \
+            --tag "$latest_tag" \
+            "${IMAGE_NAME}:latest-amd64" \
+            "${IMAGE_NAME}:latest-arm64"
+          docker buildx imagetools inspect "$version_tag"
