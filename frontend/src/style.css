@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+:root {
+  --terminal-font-stack: Monaco, "Lucida Console", "Courier New", Courier, monospace;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--terminal-font-stack);
+  font-kerning: none;
+  font-variant-ligatures: none;
+  text-rendering: optimizeSpeed;
+  background: #050805;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}

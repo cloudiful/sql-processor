@@ -1,0 +1,277 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SQL Processor API",
+    "description": "Oracle SQL transformation and parse-only validation API",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [],
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Service health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/process": {
+      "post": {
+        "tags": [],
+        "operationId": "process",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Processed SQL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Processing failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Config": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "host": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "profileName": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "Issue": {
+        "type": "object",
+        "required": [
+          "status",
+          "statementType",
+          "unitIndex",
+          "line",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "statementType": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "unitIndex": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ProcessRequest": {
+        "type": "object",
+        "required": [
+          "sql"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string"
+          },
+          "sql": {
+            "type": "string"
+          },
+          "validationConfig": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Config"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProcessResponse": {
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "processedSql": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Result"
+              }
+            ]
+          }
+        }
+      },
+      "Result": {
+        "type": "object",
+        "required": [
+          "targets"
+        ],
+        "properties": {
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Target"
+            }
+          }
+        }
+      },
+      "Target": {
+        "type": "object",
+        "required": [
+          "target",
+          "status",
+          "summary",
+          "issues"
+        ],
+        "properties": {
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "target": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

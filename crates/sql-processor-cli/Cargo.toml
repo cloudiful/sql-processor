@@ -1,0 +1,20 @@
+[package]
+name = "sql-processor"
+description = "Oracle SQL Processor CLI and web server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "sql-processor"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+encoding_rs.workspace = true
+tokio.workspace = true
+tracing-subscriber.workspace = true
+sql-processor-api = { path = "../sql-processor-api" }
+sql-processor-core = { path = "../sql-processor-core" }

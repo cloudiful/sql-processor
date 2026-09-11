@@ -1,0 +1,7 @@
+.git
+.idea
+.vscode
+frontend/node_modules
+sql-processor
+*.swp
+*.swo

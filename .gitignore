@@ -1,0 +1,26 @@
+# Binaries and libraries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Frontend dependencies and build outputs
+frontend/node_modules/
+frontend/.nuxt/
+frontend/.output/
+frontend/dist
+
+# Rust build outputs
+target/
+
+# Lockfiles generated locally (not committed)
+bun.lock
+frontend/bun.lock
+Cargo.lock

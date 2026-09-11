@@ -1,0 +1,11 @@
+[package]
+name = "sql-processor-core"
+description = "Oracle SQL and SQL*Plus transformation primitives"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+encoding_rs.workspace = true
+regex.workspace = true
+thiserror.workspace = true
