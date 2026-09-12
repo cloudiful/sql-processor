@@ -25,7 +25,7 @@ regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1.52.4", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
+tokio = { version = "1.53.1", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "limit", "trace"] }
 tracing = "0.1"
