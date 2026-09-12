@@ -14,7 +14,6 @@ thiserror.workspace = true
 tokio.workspace = true
 tower.workspace = true
 tower-http.workspace = true
-tracing.workspace = true
 utoipa.workspace = true
 utoipa-axum.workspace = true
 sql-processor-core = { path = "../sql-processor-core" }
