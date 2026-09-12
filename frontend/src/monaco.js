@@ -1,6 +1,6 @@
-import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import 'monaco-editor/esm/vs/basic-languages/sql/sql.contribution'
+import * as monaco from 'monaco-editor/editor/editor.api'
+import editorWorker from 'monaco-editor/editor/editor.worker?worker'
+import 'monaco-editor/languages/definitions/sql/register'
 
 self.MonacoEnvironment = {
   getWorker(_, label) {
